@@ -5,8 +5,8 @@
 #  importing the other classes we will need
 import os
 from datetime import datetime
-from Employee import Employee
-from Menu import Menu
+from MontysOOP.Employee import Employee
+from MontysOOP.Menu import Menu
 
 
 class Coffee:
