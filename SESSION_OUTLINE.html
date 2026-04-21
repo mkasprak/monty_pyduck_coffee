@@ -1,0 +1,60 @@
+<!-- Session Outline: Building the Monty PyDuck Coffee Streamlit App -->
+<ol>
+    <li><b>Create a New Repository</b><br>
+        Set up a new GitHub repository for the project.
+    </li>
+    <li><b>Put Final Project Code in a Folder in Old Repository</b><br>
+        Organize your final project code into a dedicated folder in your existing (old) repository.
+    </li>
+    <li><b>Upload That Folder to New GitHub Repository</b><br>
+        Copy or upload the project folder from the old repository to the new GitHub repository.
+    </li>
+    <li><b>Install GitHub Copilot from Extensions</b><br>
+        In VS Code, install the GitHub Copilot extension for AI code suggestions.
+    </li>
+    <li><b>Install Copilot Chat from Extensions</b><br>
+        Install the Copilot Chat extension for interactive AI chat and paired programming.
+    </li>
+    <li><b>Install Cline from Extensions</b><br>
+        (If needed) Install the Cline extension for enhanced command-line integration.
+    </li>
+    <li><b>Set Up Git User Name and Email</b><br>
+        Configure your global Git username and email for commit authorship:<br>
+        <code>git config --global user.name "Your Name"</code><br>
+        <code>git config --global user.email "your@email.com"</code>
+    </li>
+    <li><b>Review and Read Project Code</b><br>
+        Use Copilot Chat to read and understand all Python files and data files in the project.
+    </li>
+    <li><b>Discuss and Plan Streamlit App Features</b><br>
+        Decide on app features (user login, order history, CRUD, menu loading, etc.).<br>
+        Clarify requirements and validation rules.
+    </li>
+    <li><b>Implement Streamlit App</b><br>
+        Build the app step-by-step:
+        <ul>
+            <li>User login/creation (with employee number as unique ID)</li>
+            <li>Load menu from <code>menu.txt</code></li>
+            <li>Display 5 most recent orders for the user</li>
+            <li>Place new orders with verification before saving</li>
+            <li>Force Central Time for all order timestamps</li>
+            <li>Use session state for multi-step forms</li>
+        </ul>
+    </li>
+    <li><b>Fix Import and Package Issues</b><br>
+        Add <code>__init__.py</code> to <code>MontysOOP</code> folder.<br>
+        Use package imports everywhere (e.g., <code>from MontysOOP.Coffee import Coffee</code>).<br>
+        Remove sys.path hacks for cloud compatibility.
+    </li>
+    <li><b>Handle Timezone and Datetime Bugs</b><br>
+        Ensure all datetimes are offset-aware and in Central Time for sorting and display.
+    </li>
+    <li><b>Test and Debug in Local and Cloud Environments</b><br>
+        Push changes to GitHub and test in both local VS Code and Streamlit Cloud.<br>
+        Fix any import, path, or datetime issues as they arise.
+    </li>
+    <li><b>Document and Reflect</b><br>
+        Save session notes and best practices in a <code>.md</code> file for future reference.
+    </li>
+</ol>
+<!-- Prepared by GitHub Copilot, April 21, 2026 -->
