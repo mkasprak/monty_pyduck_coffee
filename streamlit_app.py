@@ -6,8 +6,20 @@ from MontysOOP.Employee import Employee
 from MontysOOP.Menu import Menu
 from MontysOOP.Coffee import Coffee
 from datetime import datetime
+import zoneinfo
 
 # --- Helper Functions ---
+
+
+def format_central(dt):
+    """Format datetime in Central Time as 'Month day year, hh:mm AM/PM'"""
+    if not dt:
+        return 'Unknown'
+    try:
+        central = dt.astimezone(zoneinfo.ZoneInfo('America/Chicago'))
+    except Exception:
+        central = dt
+    return central.strftime('%B %d %Y, %I:%M %p')
 
 
 def load_orders(emp_num):
@@ -115,10 +127,7 @@ if st.session_state['employee']:
             st.info("No orders found.")
         else:
             for i, order in enumerate(orders, 1):
-                order_time = (
-                    order['timestamp'].strftime('%Y-%m-%d %I:%M %p')
-                    if order['timestamp'] else 'Unknown'
-                )
+                order_time = format_central(order['timestamp'])
                 with st.expander(f"Order #{i} - {order_time}"):
                     st.write(
                         f"**Coffee:** {order['size']} "
@@ -136,23 +145,74 @@ if st.session_state['employee']:
         if not menu:
             st.error("Menu could not be loaded.")
         else:
-            with st.form("order_form"):
-                coffee_type = st.selectbox("Coffee Type", menu.get_coffee())
-                size = st.selectbox(
-                    "Size", [s.split(':')[0].strip() for s in menu.get_prices()])
-                milk = st.selectbox("Milk", menu.get_milks())
-                flavor = st.selectbox("Flavor", menu.get_flavors())
-                pump_level = "None"
-                if flavor.lower() != "none":
-                    pump_level = st.selectbox("Pump Level", menu.get_pumps())
-                submit_order = st.form_submit_button("Place Order")
-            if submit_order:
-                # Create Coffee object and calculate cost
-                order = Coffee(emp, coffee_type, size,
-                               milk, flavor, pump_level)
-                order.calculate_cost(menu)
-                save_order(order)
-                st.success("Order placed and saved!")
+            # Step 1: Gather order details
+            if 'order_form_data' not in st.session_state:
+                st.session_state['order_form_data'] = None
+            if 'order_verification' not in st.session_state:
+                st.session_state['order_verification'] = False
+
+            if not st.session_state['order_verification']:
+                with st.form("order_form"):
+                    coffee_type = st.selectbox(
+                        "Coffee Type", menu.get_coffee())
+                    size = st.selectbox(
+                        "Size", [s.split(':')[0].strip() for s in menu.get_prices()])
+                    milk = st.selectbox("Milk", menu.get_milks())
+                    flavor = st.selectbox("Flavor", menu.get_flavors())
+                    pump_level = "None"
+                    if flavor.lower() != "none":
+                        pump_level = st.selectbox(
+                            "Pump Level", menu.get_pumps())
+                    submit_order = st.form_submit_button("Next: Verify Order")
+                if submit_order:
+                    st.session_state['order_form_data'] = {
+                        'coffee_type': coffee_type,
+                        'size': size,
+                        'milk': milk,
+                        'flavor': flavor,
+                        'pump_level': pump_level
+                    }
+                    st.session_state['order_verification'] = True
+
+            # Step 2: Show verification and ask for confirmation
+            if st.session_state['order_verification']:
+                data = st.session_state['order_form_data']
+                # Create Coffee object for preview (with current Central time)
+                now_central = datetime.now(
+                    zoneinfo.ZoneInfo('America/Chicago'))
+                preview_order = Coffee(
+                    emp,
+                    data['coffee_type'],
+                    data['size'],
+                    data['milk'],
+                    data['flavor'],
+                    data['pump_level']
+                )
+                preview_order._Coffee__timestamp = now_central  # force timestamp
+                preview_order.calculate_cost(menu)
+                st.subheader("Verify Your Order")
+                st.write(f"**Coffee:** {data['size']} {data['coffee_type']}")
+                st.write(f"**Milk:** {data['milk']}")
+                st.write(
+                    f"**Flavor:** {data['flavor']} ({data['pump_level']})")
+                st.write(f"**Total:** ${preview_order.get_cost():.2f}")
+                st.write(f"**Order Time:** {format_central(now_central)}")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("Submit Order"):
+                        # Actually save order with forced Central time
+                        preview_order.set_cost(preview_order.get_cost())
+                        preview_order.save()
+                        st.success("Order placed and saved!")
+                        st.session_state['order_verification'] = False
+                        st.session_state['order_form_data'] = None
+                with col2:
+                    if st.button("Make Changes"):
+                        st.session_state['order_verification'] = False
+                with col3:
+                    if st.button("Cancel Order"):
+                        st.session_state['order_verification'] = False
+                        st.session_state['order_form_data'] = None
 
     elif page == "Update/Delete Order":
         st.header("Update or Delete Most Recent Order")
