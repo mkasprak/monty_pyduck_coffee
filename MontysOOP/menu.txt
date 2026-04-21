@@ -1,0 +1,5 @@
+COFFEE ; Espresso, Americano, Latte, Cappuccino, Macchiato, Mocha, Flat White, Tea, Cocoa
+PRICES ; Small: 3.00, Medium: 4.00, Large: 5.00, Extra Large: 6.00
+MILK ; Soy, Oat, Coconut, 2%, Whole, None
+FLAVORS ; Vanilla, Caramel, Hazelnut, Mocha, Peppermint, Pumpkin Spice, Sugar Free Vanilla, None
+PUMPS ; Light: 3, Normal: 6, Heavy: 9
