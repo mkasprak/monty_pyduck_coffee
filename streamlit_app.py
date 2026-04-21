@@ -1,12 +1,17 @@
 
 
+from Coffee import Coffee
+from Menu import Menu
+from Employee import Employee
 import streamlit as st
 import os
-from MontysOOP.Employee import Employee
-from MontysOOP.Menu import Menu
-from MontysOOP.Coffee import Coffee
+import sys
 from datetime import datetime
 import zoneinfo
+
+# --- Fix Python path for MontysOOP imports in Streamlit/Cloud ---
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "MontysOOP")))
 
 # --- Helper Functions ---
 
@@ -40,6 +45,13 @@ def load_orders(emp_num):
                 # Parse timestamp for sorting
                 try:
                     order_time = datetime.fromisoformat(parts[1])
+                    # Make offset-aware in Central Time
+                    if order_time.tzinfo is None:
+                        order_time = order_time.replace(
+                            tzinfo=zoneinfo.ZoneInfo('America/Chicago'))
+                    else:
+                        order_time = order_time.astimezone(
+                            zoneinfo.ZoneInfo('America/Chicago'))
                 except Exception:
                     order_time = None
                 orders.append({
