@@ -1,17 +1,12 @@
 
 
-from Coffee import Coffee
-from Menu import Menu
-from Employee import Employee
 import streamlit as st
 import os
-import sys
 from datetime import datetime
 import zoneinfo
-
-# --- Fix Python path for MontysOOP imports in Streamlit/Cloud ---
-sys.path.insert(0, os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "MontysOOP")))
+from MontysOOP.Coffee import Coffee
+from MontysOOP.Menu import Menu
+from MontysOOP.Employee import Employee
 
 # --- Helper Functions ---
 
