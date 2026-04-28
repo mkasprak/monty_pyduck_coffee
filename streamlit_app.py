@@ -70,6 +70,34 @@ def save_order(order: Coffee):
     order.save()
 
 
+def get_passwords_path():
+    """Return the path to the passwords file."""
+    return os.path.join(
+        os.path.dirname(__file__), 'MontysOOP', 'passwords.txt'
+    )
+
+
+def load_passwords():
+    """Load passwords dict {emp_num_str: password} from passwords.txt."""
+    passwords = {}
+    path = get_passwords_path()
+    if not os.path.exists(path):
+        return passwords
+    with open(path, 'r') as f:
+        for line in f:
+            parts = line.strip().split(',', 1)
+            if len(parts) == 2:
+                passwords[parts[0]] = parts[1]
+    return passwords
+
+
+def save_password(emp_num, password):
+    """Append a new emp_num,password entry to passwords.txt."""
+    path = get_passwords_path()
+    with open(path, 'a') as f:
+        f.write(f"{emp_num},{password}\n")
+
+
 def load_all_orders():
     """Load ALL orders from orders.txt for Monty's Dashboard."""
     orders = []
@@ -151,25 +179,45 @@ if page == "Login/Create User":
         emp_num = st.text_input(
             "Employee Number", help="This is your unique ID"
         )
-        submitted = st.form_submit_button("Login/Create")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login / Create Account")
     if submitted:
         # Validation
         if not (
             fname and lname
             and extension.isdigit() and len(extension) == 4
             and emp_num.isdigit()
+            and password
         ):
             st.error(
                 "Please fill all fields. "
                 "Extension must be exactly 4 digits."
             )
         else:
-            st.session_state['employee'] = Employee(
-                fname, lname, extension, int(emp_num)
-            )
-            st.success(
-                f"Welcome, {fname} {lname}! Your employee number is {emp_num}."
-            )
+            passwords = load_passwords()
+            emp_key = emp_num.strip()
+            if emp_key in passwords:
+                # Returning user — verify password
+                if passwords[emp_key] == password:
+                    st.session_state['employee'] = Employee(
+                        fname, lname, extension, int(emp_num)
+                    )
+                    st.success(
+                        f"Welcome back, {fname} {lname}! 👋"
+                    )
+                else:
+                    st.error(
+                        "Incorrect password. Please try again."
+                    )
+            else:
+                # New user — create account and save password
+                save_password(emp_key, password)
+                st.session_state['employee'] = Employee(
+                    fname, lname, extension, int(emp_num)
+                )
+                st.success(
+                    f"Account created! Welcome, {fname} {lname}! 🎉"
+                )
 
 
 if st.session_state['employee']:
