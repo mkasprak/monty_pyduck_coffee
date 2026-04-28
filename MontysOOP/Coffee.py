@@ -136,10 +136,17 @@ class Coffee:
         file_path = os.path.join(script_dir, "orders.txt")
 
         # Format the order string to be saved in the file.
+        # Format: emp_num,timestamp,coffee_type,size,milk,
+        #         flavor,pump_level,cost,status,fname,lname,extension
         order_string = (
-            f"{self.__employee.get_emp_num()},{self.__timestamp.isoformat()},"
+            f"{self.__employee.get_emp_num()},"
+            f"{self.__timestamp.isoformat()},"
             f"{self.__coffee_type},{self.__size},{self.__milk},"
-            f"{self.__flavor},{self.__pump_level},{self.__cost:.2f}\n"
+            f"{self.__flavor},{self.__pump_level},{self.__cost:.2f},"
+            f"Pending,"
+            f"{self.__employee.get_fname()},"
+            f"{self.__employee.get_lname()},"
+            f"{self.__employee.get_extension()}\n"
         )
         try:
             # Use the full, correct path to open the file.

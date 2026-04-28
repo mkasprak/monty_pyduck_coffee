@@ -2,8 +2,9 @@
 
 import streamlit as st
 import os
-from datetime import datetime
+from datetime import datetime, date
 import zoneinfo
+from fpdf import FPDF
 from MontysOOP.Coffee import Coffee
 from MontysOOP.Menu import Menu
 from MontysOOP.Employee import Employee
@@ -24,7 +25,8 @@ def format_central(dt):
 
 def load_orders(emp_num):
     """
-    Load and return the 5 most recent orders for the given employee number.
+    Load and return the 5 most recent orders for the given employee.
+    Supports both old (8-field) and new (12-field) order formats.
     """
     orders = []
     orders_path = os.path.join(
@@ -37,10 +39,8 @@ def load_orders(emp_num):
             if len(parts) < 8:
                 continue
             if str(parts[0]) == str(emp_num):
-                # Parse timestamp for sorting
                 try:
                     order_time = datetime.fromisoformat(parts[1])
-                    # Make offset-aware in Central Time
                     if order_time.tzinfo is None:
                         order_time = order_time.replace(
                             tzinfo=zoneinfo.ZoneInfo('America/Chicago'))
@@ -51,14 +51,18 @@ def load_orders(emp_num):
                     order_time = None
                 orders.append({
                     'timestamp': order_time,
+                    'timestamp_raw': parts[1],
                     'coffee_type': parts[2],
                     'size': parts[3],
                     'milk': parts[4],
                     'flavor': parts[5],
                     'pump_level': parts[6],
                     'cost': parts[7],
+                    'status': parts[8] if len(parts) > 8 else 'Pending',
+                    'fname': parts[9] if len(parts) > 9 else '',
+                    'lname': parts[10] if len(parts) > 10 else '',
+                    'extension': parts[11] if len(parts) > 11 else '',
                 })
-    # Sort by timestamp descending, take 5 most recent
     orders = sorted(
         [o for o in orders if o['timestamp']],
         key=lambda x: x['timestamp'], reverse=True
@@ -68,6 +72,104 @@ def load_orders(emp_num):
 
 def save_order(order: Coffee):
     order.save()
+
+
+def mark_order_filled(emp_num_str, timestamp_raw):
+    """
+    Rewrite orders.txt updating the matching order's status to 'Filled'.
+    Matches on emp_num + raw ISO timestamp string.
+    """
+    orders_path = os.path.join(
+        os.path.dirname(__file__), 'MontysOOP', 'orders.txt')
+    if not os.path.exists(orders_path):
+        return False
+    lines = []
+    found = False
+    with open(orders_path, 'r') as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if (
+                len(parts) >= 2
+                and parts[0] == emp_num_str
+                and parts[1] == timestamp_raw
+            ):
+                if len(parts) > 8:
+                    parts[8] = 'Filled'
+                else:
+                    parts.append('Filled')
+                lines.append(','.join(parts) + '\n')
+                found = True
+            else:
+                lines.append(
+                    line if line.endswith('\n') else line + '\n'
+                )
+    if found:
+        with open(orders_path, 'w') as f:
+            f.writelines(lines)
+    return found
+
+
+def generate_label_pdf(order):
+    """Generate a PDF label for an order using fpdf2. Returns bytes."""
+    pdf = FPDF()
+    pdf.add_page()
+    # Header
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, "MONTY'S COFFEE", ln=True, align='C')
+    pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 8, "ORDER LABEL", ln=True, align='C')
+    pdf.ln(3)
+    pdf.set_line_width(0.5)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+    # Employee info
+    fname = order.get('fname', '')
+    lname = order.get('lname', '')
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, f"Employee: {fname} {lname}", ln=True)
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(
+        0, 7,
+        f"Emp #: {order['emp_num']}  |  Ext: "
+        f"{order.get('extension', 'N/A')}",
+        ln=True
+    )
+    order_time = format_central(order['timestamp'])
+    pdf.cell(0, 7, f"Time: {order_time}", ln=True)
+    status = order.get('status', 'Pending')
+    pdf.cell(0, 7, f"Status: {status}", ln=True)
+    pdf.ln(3)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+    # Order details
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(
+        0, 9,
+        f"{order['size']} {order['coffee_type']}",
+        ln=True
+    )
+    pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 7, f"Milk:   {order['milk']}", ln=True)
+    pdf.cell(
+        0, 7,
+        f"Flavor: {order['flavor']} ({order['pump_level']})",
+        ln=True
+    )
+    pdf.ln(3)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 9, f"TOTAL: ${order['cost']}", ln=True)
+    # Allergy warning
+    allergy = ALLERGY_WARNINGS.get(order['milk'], '')
+    if allergy:
+        pdf.ln(3)
+        plain = allergy.replace('**', '').replace('⚠️ ', 'WARNING: ')
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(200, 0, 0)
+        pdf.multi_cell(0, 7, plain)
+        pdf.set_text_color(0, 0, 0)
+    return bytes(pdf.output())
 
 
 def get_passwords_path():
@@ -123,12 +225,17 @@ def load_all_orders():
             orders.append({
                 'emp_num': parts[0],
                 'timestamp': order_time,
+                'timestamp_raw': parts[1],
                 'coffee_type': parts[2],
                 'size': parts[3],
                 'milk': parts[4],
                 'flavor': parts[5],
                 'pump_level': parts[6],
                 'cost': parts[7],
+                'status': parts[8] if len(parts) > 8 else 'Pending',
+                'fname': parts[9] if len(parts) > 9 else '',
+                'lname': parts[10] if len(parts) > 10 else '',
+                'extension': parts[11] if len(parts) > 11 else '',
             })
     return sorted(
         [o for o in orders if o['timestamp']],
@@ -152,6 +259,25 @@ st.set_page_config(
     page_title="Monty's Coffee OOP App",
     layout="centered"
 )
+
+# --- Dark Mode Toggle ---
+if 'dark_mode' not in st.session_state:
+    st.session_state['dark_mode'] = False
+st.session_state['dark_mode'] = st.sidebar.checkbox(
+    "🌙 Dark Mode", value=st.session_state['dark_mode']
+)
+if st.session_state['dark_mode']:
+    st.markdown("""
+    <style>
+    .stApp { background-color: #1e1e2e !important; color: #cdd6f4 !important; }
+    section[data-testid="stSidebar"] { background-color: #181825 !important; }
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #313244 !important; color: #cdd6f4 !important; }
+    .stExpander { background-color: #27273a !important; }
+    .stAlert { background-color: #313244 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.sidebar.title("Monty's Coffee")
 page = st.sidebar.radio(
     "Navigation",
@@ -237,7 +363,12 @@ if st.session_state['employee']:
         else:
             for i, order in enumerate(orders, 1):
                 order_time = format_central(order['timestamp'])
-                with st.expander(f"Order #{i} - {order_time}"):
+                status = order.get('status', 'Pending')
+                status_icon = "✅" if status == "Filled" else "🕐"
+                with st.expander(
+                    f"Order #{i} — {order_time} "
+                    f"{status_icon} {status}"
+                ):
                     st.write(
                         f"**Coffee:** {order['size']} "
                         f"{order['coffee_type']}"
@@ -260,6 +391,14 @@ if st.session_state['employee']:
                         st.session_state['page_override'] = "Place Order"
                         st.rerun()
 
+            # --- Order History Chart ---
+            st.subheader("☕ Your Order History")
+            counts = {}
+            for o in orders:
+                key = o['coffee_type']
+                counts[key] = counts.get(key, 0) + 1
+            st.bar_chart(counts)
+
     elif page == "Place Order":
         st.header("Place a New Order")
         if not menu:
@@ -272,18 +411,46 @@ if st.session_state['employee']:
                 st.session_state['order_verification'] = False
 
             if not st.session_state['order_verification']:
+                # Pre-populate dropdowns if coming from Reorder
+                prev = st.session_state.get('order_form_data') or {}
+                coffee_opts = menu.get_coffee()
+                size_opts = [
+                    s.split(':')[0].strip()
+                    for s in menu.get_prices()
+                ]
+                milk_opts = menu.get_milks()
+                flavor_opts = menu.get_flavors()
+                pump_opts = menu.get_pumps()
+
+                def _idx(lst, val):
+                    return lst.index(val) if val in lst else 0
+
                 with st.form("order_form"):
                     coffee_type = st.selectbox(
-                        "Coffee Type", menu.get_coffee())
+                        "Coffee Type", coffee_opts,
+                        index=_idx(coffee_opts, prev.get('coffee_type'))
+                    )
                     size = st.selectbox(
-                        "Size", [s.split(':')[0].strip() for s in menu.get_prices()])
-                    milk = st.selectbox("Milk", menu.get_milks())
-                    flavor = st.selectbox("Flavor", menu.get_flavors())
+                        "Size", size_opts,
+                        index=_idx(size_opts, prev.get('size'))
+                    )
+                    milk = st.selectbox(
+                        "Milk", milk_opts,
+                        index=_idx(milk_opts, prev.get('milk'))
+                    )
+                    flavor = st.selectbox(
+                        "Flavor", flavor_opts,
+                        index=_idx(flavor_opts, prev.get('flavor'))
+                    )
                     pump_level = "None"
                     if flavor.lower() != "none":
                         pump_level = st.selectbox(
-                            "Pump Level", menu.get_pumps())
-                    submit_order = st.form_submit_button("Next: Verify Order")
+                            "Pump Level", pump_opts,
+                            index=_idx(pump_opts, prev.get('pump_level'))
+                        )
+                    submit_order = st.form_submit_button(
+                        "Next: Verify Order"
+                    )
                 if submit_order:
                     st.session_state['order_form_data'] = {
                         'coffee_type': coffee_type,
@@ -375,9 +542,7 @@ if st.session_state['employee']:
 
     elif page == "🦆 Monty's Dashboard":
         st.header("🦆 Monty's Dashboard — All Orders")
-        st.caption(
-            "Intern view: see all pending orders and print labels."
-        )
+        st.caption("Intern view: see all orders and print/download labels.")
         intern_pin = st.text_input(
             "Enter Intern PIN to access dashboard",
             type="password"
@@ -387,19 +552,41 @@ if st.session_state['employee']:
             if not all_orders:
                 st.info("No orders found yet.")
             else:
+                pending = [
+                    o for o in all_orders if o.get('status') != 'Filled'
+                ]
+                filled = [
+                    o for o in all_orders if o.get('status') == 'Filled'
+                ]
                 st.success(
-                    f"{len(all_orders)} order(s) found. "
-                    "Ready to print labels!"
+                    f"📋 {len(pending)} pending  |  "
+                    f"✅ {len(filled)} filled  |  "
+                    f"Total: {len(all_orders)}"
                 )
-                for i, order in enumerate(all_orders, 1):
+                show_filled = st.checkbox("Show filled orders too")
+                display_orders = (
+                    all_orders if show_filled else pending
+                )
+                for i, order in enumerate(display_orders, 1):
                     order_time = format_central(order['timestamp'])
                     allergy = ALLERGY_WARNINGS.get(order['milk'], "")
-                    label = (
-                        f"🏷️ **Label #{i}** | "
-                        f"Emp #{order['emp_num']} | "
-                        f"{order_time}"
+                    status = order.get('status', 'Pending')
+                    status_icon = "✅" if status == "Filled" else "🕐"
+                    fname = order.get('fname', '')
+                    lname = order.get('lname', '')
+                    ext = order.get('extension', '')
+                    header = (
+                        f"🏷️ #{i} | {fname} {lname} "
+                        f"(Ext: {ext}) | {order_time} "
+                        f"| {status_icon} {status}"
                     )
-                    with st.expander(label):
+                    with st.expander(header):
+                        st.write(
+                            f"**Employee:** {fname} {lname}  "
+                            f"| Emp #: {order['emp_num']}  "
+                            f"| Ext: {ext}"
+                        )
+                        st.write(f"**Time:** {order_time}")
                         st.write(
                             f"**Coffee:** {order['size']} "
                             f"{order['coffee_type']}"
@@ -412,18 +599,35 @@ if st.session_state['employee']:
                             f"({order['pump_level']})"
                         )
                         st.write(f"**Total:** ${order['cost']}")
-                        st.code(
-                            f"ORDER LABEL\n"
-                            f"Emp #: {order['emp_num']}\n"
-                            f"Time:  {order_time}\n"
-                            f"Item:  {order['size']} "
-                            f"{order['coffee_type']}\n"
-                            f"Milk:  {order['milk']}\n"
-                            f"Flvr:  {order['flavor']} "
-                            f"({order['pump_level']})\n"
-                            f"Total: ${order['cost']}",
-                            language=None
-                        )
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            # PDF Download
+                            pdf_bytes = generate_label_pdf(order)
+                            st.download_button(
+                                label="📄 Download Label PDF",
+                                data=pdf_bytes,
+                                file_name=(
+                                    f"label_{order['emp_num']}_"
+                                    f"{i}.pdf"
+                                ),
+                                mime="application/pdf",
+                                key=f"pdf_{i}"
+                            )
+                        with btn_col2:
+                            # Mark as Filled
+                            if status != 'Filled':
+                                if st.button(
+                                    "✅ Mark as Filled",
+                                    key=f"fill_{i}"
+                                ):
+                                    mark_order_filled(
+                                        order['emp_num'],
+                                        order['timestamp_raw']
+                                    )
+                                    st.success("Order marked as filled!")
+                                    st.rerun()
+                            else:
+                                st.write("✅ Already filled")
         elif intern_pin:
             st.error("Incorrect PIN. Access denied! 🦆")
 else:
