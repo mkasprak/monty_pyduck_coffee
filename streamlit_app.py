@@ -69,8 +69,56 @@ def load_orders(emp_num):
 def save_order(order: Coffee):
     order.save()
 
+
+def load_all_orders():
+    """Load ALL orders from orders.txt for Monty's Dashboard."""
+    orders = []
+    orders_path = os.path.join(
+        os.path.dirname(__file__), 'MontysOOP', 'orders.txt')
+    if not os.path.exists(orders_path):
+        return []
+    with open(orders_path, 'r') as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) < 8:
+                continue
+            try:
+                order_time = datetime.fromisoformat(parts[1])
+                if order_time.tzinfo is None:
+                    order_time = order_time.replace(
+                        tzinfo=zoneinfo.ZoneInfo('America/Chicago'))
+                else:
+                    order_time = order_time.astimezone(
+                        zoneinfo.ZoneInfo('America/Chicago'))
+            except Exception:
+                order_time = None
+            orders.append({
+                'emp_num': parts[0],
+                'timestamp': order_time,
+                'coffee_type': parts[2],
+                'size': parts[3],
+                'milk': parts[4],
+                'flavor': parts[5],
+                'pump_level': parts[6],
+                'cost': parts[7],
+            })
+    return sorted(
+        [o for o in orders if o['timestamp']],
+        key=lambda x: x['timestamp'], reverse=True
+    )
+
 # --- Streamlit App ---
 
+
+# --- Allergy Warnings ---
+# Maps each milk option to its allergen warning message.
+ALLERGY_WARNINGS = {
+    "Soy":     "⚠️ This drink contains **Soy**. May cause reactions in those with soy allergies.",
+    "Oat":     "⚠️ This drink contains **Oats/Gluten**. May cause reactions in those with gluten sensitivities.",
+    "Coconut": "⚠️ This drink contains **Coconut (Tree Nut)**. May cause reactions in those with tree nut allergies.",
+    "2%":      "⚠️ This drink contains **Dairy**. May cause reactions in those with lactose intolerance or dairy allergies.",
+    "Whole":   "⚠️ This drink contains **Dairy**. May cause reactions in those with lactose intolerance or dairy allergies.",
+}
 
 st.set_page_config(
     page_title="Monty's Coffee OOP App",
@@ -83,7 +131,8 @@ page = st.sidebar.radio(
         "Login/Create User",
         "My Orders",
         "Place Order",
-        "Update/Delete Order"
+        "Update/Delete Order",
+        "🦆 Monty's Dashboard"
     ]
 )
 
@@ -106,9 +155,14 @@ if page == "Login/Create User":
     if submitted:
         # Validation
         if not (
-            fname and lname and extension.isdigit() and emp_num.isdigit()
+            fname and lname
+            and extension.isdigit() and len(extension) == 4
+            and emp_num.isdigit()
         ):
-            st.error("Please fill all fields with valid data.")
+            st.error(
+                "Please fill all fields. "
+                "Extension must be exactly 4 digits."
+            )
         else:
             st.session_state['employee'] = Employee(
                 fname, lname, extension, int(emp_num)
@@ -146,6 +200,17 @@ if st.session_state['employee']:
                         f"({order['pump_level']})"
                     )
                     st.write(f"**Total:** ${order['cost']}")
+                    if st.button("🔁 Reorder This", key=f"reorder_{i}"):
+                        st.session_state['order_form_data'] = {
+                            'coffee_type': order['coffee_type'],
+                            'size': order['size'],
+                            'milk': order['milk'],
+                            'flavor': order['flavor'],
+                            'pump_level': order['pump_level'],
+                        }
+                        st.session_state['order_verification'] = True
+                        st.session_state['page_override'] = "Place Order"
+                        st.rerun()
 
     elif page == "Place Order":
         st.header("Place a New Order")
@@ -204,9 +269,23 @@ if st.session_state['employee']:
                     f"**Flavor:** {data['flavor']} ({data['pump_level']})")
                 st.write(f"**Total:** ${preview_order.get_cost():.2f}")
                 st.write(f"**Order Time:** {format_central(now_central)}")
+
+                # --- Allergy Warning ---
+                allergy_msg = ALLERGY_WARNINGS.get(data['milk'])
+                if allergy_msg:
+                    st.warning(allergy_msg)
+                    allergy_confirmed = st.checkbox(
+                        "I understand and confirm this milk selection."
+                    )
+                else:
+                    # No dairy/allergen milk selected (e.g., "None")
+                    allergy_confirmed = True
+
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    if st.button("Submit Order"):
+                    if st.button(
+                        "Submit Order", disabled=not allergy_confirmed
+                    ):
                         # Actually save order with forced Central time
                         preview_order.set_cost(preview_order.get_cost())
                         preview_order.save()
@@ -245,6 +324,60 @@ if st.session_state['employee']:
                 if st.button("Delete Order"):
                     # Delete logic: remove from file (not implemented yet)
                     st.warning("Delete functionality coming soon!")
+
+    elif page == "🦆 Monty's Dashboard":
+        st.header("🦆 Monty's Dashboard — All Orders")
+        st.caption(
+            "Intern view: see all pending orders and print labels."
+        )
+        intern_pin = st.text_input(
+            "Enter Intern PIN to access dashboard",
+            type="password"
+        )
+        if intern_pin == "quack":
+            all_orders = load_all_orders()
+            if not all_orders:
+                st.info("No orders found yet.")
+            else:
+                st.success(
+                    f"{len(all_orders)} order(s) found. "
+                    "Ready to print labels!"
+                )
+                for i, order in enumerate(all_orders, 1):
+                    order_time = format_central(order['timestamp'])
+                    allergy = ALLERGY_WARNINGS.get(order['milk'], "")
+                    label = (
+                        f"🏷️ **Label #{i}** | "
+                        f"Emp #{order['emp_num']} | "
+                        f"{order_time}"
+                    )
+                    with st.expander(label):
+                        st.write(
+                            f"**Coffee:** {order['size']} "
+                            f"{order['coffee_type']}"
+                        )
+                        st.write(f"**Milk:** {order['milk']}")
+                        if allergy:
+                            st.warning(allergy)
+                        st.write(
+                            f"**Flavor:** {order['flavor']} "
+                            f"({order['pump_level']})"
+                        )
+                        st.write(f"**Total:** ${order['cost']}")
+                        st.code(
+                            f"ORDER LABEL\n"
+                            f"Emp #: {order['emp_num']}\n"
+                            f"Time:  {order_time}\n"
+                            f"Item:  {order['size']} "
+                            f"{order['coffee_type']}\n"
+                            f"Milk:  {order['milk']}\n"
+                            f"Flvr:  {order['flavor']} "
+                            f"({order['pump_level']})\n"
+                            f"Total: ${order['cost']}",
+                            language=None
+                        )
+        elif intern_pin:
+            st.error("Incorrect PIN. Access denied! 🦆")
 else:
     if page != "Login/Create User":
         st.warning("Please login or create a user first.")
